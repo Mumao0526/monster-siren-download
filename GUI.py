@@ -9,7 +9,7 @@ from ttkbootstrap import ttk
 from pathlib import Path
 from multiprocessing import Manager
 
-import MonsterSirenDownloader
+from downloader.MonsterSirenDownloader import MonsterSirenDownloader
 
 import PIL.Image
 
@@ -23,6 +23,11 @@ class DownloadGUI(tb.Window):
         super().__init__(*args, **kwargs)
 
         self.title("MonsterSiren Downloader")
+
+        # Set favicon
+        self.iconbitmap(Path.cwd() / "resource/favicon.ico")  # Windows
+        favicon = tk.PhotoImage(file=Path.cwd() / "resource/favicon.png")
+        self.iconphoto(True, favicon)   # Linux / macOS
 
         width = 350
         height = 400
@@ -40,17 +45,8 @@ class DownloadGUI(tb.Window):
         # 儲存下載路徑
         self.download_path = tk.StringVar(value=str(Path.cwd() / "MonsterSiren"))
 
-        # 建立下載器
-        queue = Manager().Queue()
-        self.downloader = MonsterSirenDownloader.MonsterSirenDownloader(queue)
-
-        # 下載中旗標、背景執行緒
+        # 下載中旗標
         self.is_downloading = False
-        self.download_thread = None
-
-        # 取得總專輯數, 以及已完成的計數(用來更新進度)
-        self.total_albums = len(self.downloader.all_albums)
-        self.completed_count = 0
 
         # 介面佈局
         self.create_widgets()
@@ -159,14 +155,11 @@ class DownloadGUI(tb.Window):
         # if path_json.exists():
         #     path_json.unlink()
 
-        # 取得所有專輯
-        session = requests.Session()
-        all_albums = session.get(
-            "https://monster-siren.hypergryph.com/api/albums",
-            headers={"Accept": "application/json"},
-        ).json()["data"]
-        self.total_albums = len(all_albums)
+        # 建立下載器
+        self.downloader = MonsterSirenDownloader(self.download_path.get())
+        self.total_albums = len(self.downloader.get_albums())
 
+        # 開始下載
         self.download_thread = threading.Thread(target=self.downloader.run, daemon=True)
         self.download_thread.start()
 
@@ -192,7 +185,6 @@ class DownloadGUI(tb.Window):
         以 (completed_count / total_albums * 100) 進行圓形進度。
         """
         if not self.is_downloading:
-            self.finish_download()
             return
 
         # 下載仍在進行 -> 判斷已完成幾張
@@ -235,12 +227,13 @@ class DownloadGUI(tb.Window):
         """
         使用者按下「停止」按鈕，呼叫 downloader 的 stop() 方法。
         """
-        if not self.downloader.be_stopped:
+        if self.download_thread.is_alive():
             self.label_status.config(text="停止下載中...")
             self.downloader.stop()
             self.label_status.config(text="已強制停止")
             self.is_downloading = False
 
+            self.stop_animation((self.label_gif_1, self.label_gif_2))
             self.btn_start.config(state="normal")
             self.btn_stop.config(state="disabled")
             print("Download stopped")
