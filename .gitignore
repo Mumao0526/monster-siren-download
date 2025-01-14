@@ -1,3 +1,6 @@
 MonsterSiren
 build
 dist
+
+test/
+test_*
