@@ -5,3 +5,6 @@ pydub
 pathvalidate
 pylrc
 Pillow
+
+# GUI
+ttkbootstrap
