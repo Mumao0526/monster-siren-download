@@ -1,15 +1,17 @@
 # GUI.py
+import json
+import requests
 import threading
 import tkinter as tk
 from tkinter import filedialog
 import ttkbootstrap as tb
 from ttkbootstrap import ttk
-import json
 from pathlib import Path
 from multiprocessing import Manager
+
 import MonsterSirenDownloader
+
 import PIL.Image
-import requests
 
 # If CUBIC doesn't exist, alias it to BICUBIC
 if not hasattr(PIL.Image, "CUBIC"):
@@ -21,8 +23,19 @@ class DownloadGUI(tb.Window):
         super().__init__(*args, **kwargs)
 
         self.title("MonsterSiren Downloader")
-        self.geometry("500x400")
+
+        width = 350
+        height = 400
+        window_width = self.winfo_screenwidth()  # 取得螢幕寬度
+        window_height = self.winfo_screenheight()  # 取得螢幕高度
+        left = int((window_width - width) / 2)  # 計算左上 x 座標以置中
+        top = int((window_height - height) / 2)  # 計算左上 y 座標以置中
+        self.geometry(f"{width}x{height}+{left}+{top}")
         self.resizable(False, False)
+
+        # 載入 gif 圖片
+        git_path = Path.cwd() / "resource/pepe.gif"
+        self.photoimage_objects = self.get_git_frames(git_path)
 
         # 儲存下載路徑
         self.download_path = tk.StringVar(value=str(Path.cwd() / "MonsterSiren"))
@@ -50,28 +63,37 @@ class DownloadGUI(tb.Window):
         label_path = ttk.Label(frame_path, text="下載資料夾:")
         label_path.pack(side="left")
 
-        entry_path = ttk.Entry(frame_path, textvariable=self.download_path, width=40)
+        entry_path = ttk.Entry(frame_path, textvariable=self.download_path, width=20)
         entry_path.pack(side="left", padx=5)
 
-        btn_browse = ttk.Button(frame_path, text="選擇...", command=self.select_folder)
-        btn_browse.pack(side="left")
+        btn_browse = ttk.Button(frame_path, text="...", command=self.select_folder)
+        btn_browse.pack(side="right")
 
+        # 進度條區
+        frame_progress = ttk.Frame(self)
         # 進度 Meter (圓形)
         self.meter = tb.Meter(
-            self,
+            frame_progress,
             bootstyle="primary",
             # meterstyle="primary",
             amounttotal=100,
             amountused=0,
             subtext="下載進度",
             interactive=False,
-            stripethickness=2,
+            stripethickness=5,
+            metersize=250,
+            textright="%",
         )
-        self.meter.pack(pady=40)
+        self.meter.grid(row=0, column=1, pady=10)
+
+        self.label_gif_1 = ttk.Label(frame_progress)
+        self.label_gif_1.grid(row=0, column=0, sticky="s")
+        self.label_gif_2 = ttk.Label(frame_progress)
+        self.label_gif_2.grid(row=0, column=2, sticky="s")
+        frame_progress.pack(pady=10)
 
         # 按鈕區
         frame_btn = ttk.Frame(self)
-        frame_btn.pack(pady=10)
 
         self.btn_start = ttk.Button(
             frame_btn, text="開始下載", command=self.start_download
@@ -82,10 +104,40 @@ class DownloadGUI(tb.Window):
             frame_btn, text="停止下載", command=self.stop_download, state="disabled"
         )
         self.btn_stop.grid(row=0, column=1, padx=5)
+        frame_btn.pack(padx=10, pady=10)
 
         # 底部狀態顯示
         self.label_status = ttk.Label(self, text="尚未下載")
         self.label_status.pack(side="bottom", pady=10)
+
+    def get_git_frames(self, gif_path):
+        # 取得 gif 圖片的所有 frames
+        file = Path(gif_path)
+        info = PIL.Image.open(file)
+
+        self.frames = info.n_frames
+        photoimage_objects = []
+        for i in range(self.frames):
+            obj = tk.PhotoImage(file=file, format=f"gif -index {i}")
+            photoimage_objects.append(obj)
+        return photoimage_objects
+
+    def animation(self, ttk_objects, current_frame=0):
+        global loop
+        image = self.photoimage_objects[current_frame]
+        for ttk_object in ttk_objects:
+            ttk_object.configure(image=image)
+        current_frame = current_frame + 1
+
+        if current_frame == self.frames:
+            current_frame = 0
+
+        loop = self.after(50, lambda: self.animation(ttk_objects, current_frame))
+
+    def stop_animation(self, ttk_objects):
+        self.after_cancel(loop)
+        for ttk_object in ttk_objects:
+            ttk_object.configure(image="")
 
     def select_folder(self):
         path = filedialog.askdirectory()
@@ -119,6 +171,7 @@ class DownloadGUI(tb.Window):
         self.download_thread.start()
 
         # 啟動檢查緒程是否結束的輪詢
+        self.animation((self.label_gif_1, self.label_gif_2))
         self.check_thread()
 
     def check_thread(self):
@@ -139,10 +192,7 @@ class DownloadGUI(tb.Window):
         以 (completed_count / total_albums * 100) 進行圓形進度。
         """
         if not self.is_downloading:
-            # 如果下載已結束，直接把進度設 100
-            self.meter.configure(amountused=100)
-            self.label_status.config(text="下載完成!")
-            self.btn_start.config(state="normal")
+            self.finish_download()
             return
 
         # 下載仍在進行 -> 判斷已完成幾張
@@ -174,6 +224,7 @@ class DownloadGUI(tb.Window):
         """
         下載完成後，將進度條設為 100%，並顯示「下載完成」。
         """
+        self.stop_animation((self.label_gif_1, self.label_gif_2))
         self.meter.configure(amountused=100)
         self.label_status.config(text="下載完成!")
         self.btn_start.config(state="normal")
