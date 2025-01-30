@@ -3,6 +3,7 @@ import json
 import requests
 import threading
 import tkinter as tk
+from tkinter import messagebox
 from tkinter import filedialog
 import ttkbootstrap as tb
 from ttkbootstrap import ttk
@@ -23,40 +24,41 @@ class DownloadGUI(tb.Window):
         super().__init__(*args, **kwargs)
 
         self.title("MonsterSiren Downloader")
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)  # close window event
 
         # Set favicon
         self.iconbitmap(Path.cwd() / "resource/favicon.ico")  # Windows
         favicon = tk.PhotoImage(file=Path.cwd() / "resource/favicon.png")
-        self.iconphoto(True, favicon)   # Linux / macOS
+        self.iconphoto(True, favicon)  # Linux / macOS
 
         width = 350
         height = 400
-        window_width = self.winfo_screenwidth()  # 取得螢幕寬度
-        window_height = self.winfo_screenheight()  # 取得螢幕高度
-        left = int((window_width - width) / 2)  # 計算左上 x 座標以置中
-        top = int((window_height - height) / 2)  # 計算左上 y 座標以置中
+        window_width = self.winfo_screenwidth()  # get screen width
+        window_height = self.winfo_screenheight()  # get screen height
+        # set window to center
+        left = int((window_width - width) / 2)
+        top = int((window_height - height) / 2)
         self.geometry(f"{width}x{height}+{left}+{top}")
-        self.resizable(False, False)
+        # self.resizable(False, False)
 
-        # 載入 gif 圖片
+        # load gif image
         git_path = Path.cwd() / "resource/pepe.gif"
-        self.photoimage_objects = self.get_git_frames(git_path)
+        self.animation_images = self.get_git_frames(git_path)
 
-        # 儲存下載路徑
+        # Where to download
         self.download_path = tk.StringVar(value=str(Path.cwd() / "MonsterSiren"))
 
-        # 下載中旗標
+        # flag
         self.is_downloading = False
 
-        # 介面佈局
         self.create_widgets()
 
     def create_widgets(self):
-        # 路徑選擇 Frame
+        # Frame of the download path area
         frame_path = ttk.Frame(self)
         frame_path.pack(pady=10, fill="x", padx=10)
 
-        label_path = ttk.Label(frame_path, text="下載資料夾:")
+        label_path = ttk.Label(frame_path, text="Download Path:")
         label_path.pack(side="left")
 
         entry_path = ttk.Entry(frame_path, textvariable=self.download_path, width=20)
@@ -65,16 +67,16 @@ class DownloadGUI(tb.Window):
         btn_browse = ttk.Button(frame_path, text="...", command=self.select_folder)
         btn_browse.pack(side="right")
 
-        # 進度條區
+        # Frame of the progress area
         frame_progress = ttk.Frame(self)
-        # 進度 Meter (圓形)
+        # progress circle bar
         self.meter = tb.Meter(
             frame_progress,
             bootstyle="primary",
             # meterstyle="primary",
             amounttotal=100,
             amountused=0,
-            subtext="下載進度",
+            subtext="Progress",
             interactive=False,
             stripethickness=5,
             metersize=250,
@@ -88,26 +90,34 @@ class DownloadGUI(tb.Window):
         self.label_gif_2.grid(row=0, column=2, sticky="s")
         frame_progress.pack(pady=10)
 
-        # 按鈕區
+        # Frame of the button area
         frame_btn = ttk.Frame(self)
 
         self.btn_start = ttk.Button(
-            frame_btn, text="開始下載", command=self.start_download
+            frame_btn, text="Start", command=self.start_download
         )
         self.btn_start.grid(row=0, column=0, padx=5)
 
         self.btn_stop = ttk.Button(
-            frame_btn, text="停止下載", command=self.stop_download, state="disabled"
+            frame_btn, text="Stop", command=self.stop_download, state="disabled"
         )
         self.btn_stop.grid(row=0, column=1, padx=5)
         frame_btn.pack(padx=10, pady=10)
 
-        # 底部狀態顯示
-        self.label_status = ttk.Label(self, text="尚未下載")
+        # Status label on the bottom
+        self.label_status = ttk.Label(self, text="Waiting for download start...")
         self.label_status.pack(side="bottom", pady=10)
 
     def get_git_frames(self, gif_path):
-        # 取得 gif 圖片的所有 frames
+        """Get all frames of gif image.
+
+        Args:
+            gif_path (str): The path of gif image.
+
+        Returns:
+            list: A list of PhotoImage objects.
+        """
+        # get gif frames
         file = Path(gif_path)
         info = PIL.Image.open(file)
 
@@ -119,9 +129,16 @@ class DownloadGUI(tb.Window):
         return photoimage_objects
 
     def animation(self, ttk_objects, current_frame=0):
-        global loop
-        image = self.photoimage_objects[current_frame]
+        """Play gif animation.
+
+        Args:
+            ttk_objects (list): A list of ttk widgets.
+            current_frame (int, optional): The current frame index. Defaults to 0.
+        """
+        global loop  # prevent garbage collection
+        image = self.animation_images[current_frame]
         for ttk_object in ttk_objects:
+            # update image
             ttk_object.configure(image=image)
         current_frame = current_frame + 1
 
@@ -131,63 +148,61 @@ class DownloadGUI(tb.Window):
         loop = self.after(50, lambda: self.animation(ttk_objects, current_frame))
 
     def stop_animation(self, ttk_objects):
+        """Stop gif animation.
+
+        Args:
+            ttk_objects (list): A list of ttk widgets.
+        """
         self.after_cancel(loop)
         for ttk_object in ttk_objects:
             ttk_object.configure(image="")
 
     def select_folder(self):
+        """Select download folder"""
         path = filedialog.askdirectory()
         if path:
             self.download_path.set(path)
 
     def start_download(self):
-        # 若已在下載中，則不重複開始
+        """Start download thread."""
         if self.is_downloading:
             return
 
         self.is_downloading = True
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
-        self.label_status.config(text="開始下載...")
+        self.label_status.config(text="Downloading...")
 
-        # 清除舊的 completed_albums.json 進度 (選擇性)
-        # path_json = Path(self.download_path.get()) / "completed_albums.json"
-        # if path_json.exists():
-        #     path_json.unlink()
-
-        # 建立下載器
+        # create downloader
         self.downloader = MonsterSirenDownloader(self.download_path.get())
         self.total_albums = len(self.downloader.get_albums())
 
-        # 開始下載
+        # create download thread and start
         self.download_thread = threading.Thread(target=self.downloader.run, daemon=True)
         self.download_thread.start()
 
-        # 啟動檢查緒程是否結束的輪詢
+        # play gif animation
         self.animation((self.label_gif_1, self.label_gif_2))
-        self.check_thread()
+        self.check_thread()  # check download thread status
 
     def check_thread(self):
-        """檢查下載緒程是否還活著。"""
+        """Check download thread status."""
         if self.download_thread.is_alive():
-            # 如果還在下載，就更新一下進度
+            # is downloading -> update progress
             self.update_progress()
-            # 0.5 秒後再檢查
+            # 0.5 sec check once
             self.after(500, self.check_thread)
         else:
-            # 緒程結束，可能代表下載成功或中途停止
+            # download thread is finished
             self.update_progress()
             self.finish_download()
 
     def update_progress(self):
-        """
-        透過讀取 completed_albums.json 來更新已完成的專輯數量
-        以 (completed_count / total_albums * 100) 進行圓形進度。
-        """
+        """Update download progress."""
         if not self.is_downloading:
             return
 
-        # 下載仍在進行 -> 判斷已完成幾張
+        # count completed albums
         path_json = Path(self.download_path.get()) / "completed_albums.json"
         if path_json.exists():
             try:
@@ -199,6 +214,7 @@ class DownloadGUI(tb.Window):
         else:
             self.completed_count = 0
 
+        # update progress bar
         if self.total_albums > 0:
             percent = int((self.completed_count / self.total_albums) * 100)
         else:
@@ -206,31 +222,27 @@ class DownloadGUI(tb.Window):
 
         self.meter.configure(amountused=percent)
         self.label_status.config(
-            text=f"已完成 {self.completed_count}/{self.total_albums}"
+            text=f"{self.completed_count}/{self.total_albums} completed."
         )
 
         if percent == 100:
             self.finish_download()
 
     def finish_download(self):
-        """
-        下載完成後，將進度條設為 100%，並顯示「下載完成」。
-        """
+        """Finish download."""
         self.stop_animation((self.label_gif_1, self.label_gif_2))
         self.meter.configure(amountused=100)
-        self.label_status.config(text="下載完成!")
+        self.label_status.config(text="Completed.")
         self.btn_start.config(state="normal")
         self.btn_stop.config(state="disabled")
         self.is_downloading = False
 
     def stop_download(self):
-        """
-        使用者按下「停止」按鈕，呼叫 downloader 的 stop() 方法。
-        """
+        """Stop download thread."""
         if self.download_thread.is_alive():
-            self.label_status.config(text="停止下載中...")
-            self.downloader.stop()
-            self.label_status.config(text="已強制停止")
+            self.label_status.config(text="Stopping...")
+            self.downloader.stop()  # stop downloader
+            self.label_status.config(text="Download stopped.")
             self.is_downloading = False
 
             self.stop_animation((self.label_gif_1, self.label_gif_2))
@@ -238,12 +250,19 @@ class DownloadGUI(tb.Window):
             self.btn_stop.config(state="disabled")
             print("Download stopped")
 
+    def on_closing(self):
+        """Close window event."""
+        if self.is_downloading and messagebox.askyesno(
+            "Warn", "In downloading, are you sure to exit?"
+        ):
+            self.stop_download()
+        self.destroy()  # close window
+
 
 if __name__ == "__main__":
-    # Windows + multiprocessing + tkinter 時，有時需要 freeze_support
     import multiprocessing
 
-    multiprocessing.freeze_support()
+    multiprocessing.freeze_support()  # For Windows
 
     app = DownloadGUI(themename="darkly")
     app.mainloop()
