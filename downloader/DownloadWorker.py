@@ -1,19 +1,20 @@
 import os
+import sys
 import json
-import logging
-from pathlib import Path
 from PIL import Image
 import requests
 from tqdm import tqdm
+from .my_logger import get_logger
 from .MetadataManager import MetadataManager
 from pydub import AudioSegment
 
 
 class DownloadWorker:
-    def __init__(self, directory, stop_event, mutex):
+    def __init__(self, directory, stop_event, mutex, log_queue=None):
         self.directory = directory
         self.stop_event = stop_event
         self.mutex = mutex
+        self.logger = get_logger()
 
     def download_album(self, album_data):
         try:
@@ -27,7 +28,7 @@ class DownloadWorker:
             album_directory.mkdir(parents=True, exist_ok=True)
             session = requests.Session()
 
-            logging.info(f"開始下載專輯: {album_name}")
+            self.logger.info(f"開始下載專輯: {album_name}")
 
             self.download_cover(session, album_directory, album_data["coverUrl"])
 
@@ -40,7 +41,7 @@ class DownloadWorker:
             ).json()["data"]
             for song_track_number, song_data in enumerate(songs_data["songs"]):
                 if self.stop_event.is_set():
-                    logging.warning(f"檢測到停止指令，停止下載專輯: {album_name}")
+                    self.logger.warning(f"檢測到停止指令，停止下載專輯: {album_name}")
                     return False
                 song_data["tracknumber"] = song_track_number + 1
                 self.download_song(session, album_directory, song_data, album_data)
@@ -61,11 +62,11 @@ class DownloadWorker:
                 ) as f:
                     json.dump(completed_albums, f)
 
-            logging.info(f"專輯 {album_data['name']} 下載完成。")
+            self.logger.info(f"專輯 {album_data['name']} 下載完成。")
             return True
 
         except Exception as e:
-            logging.exception(f"專輯 {album_data['name']} 下載失敗: {e}")
+            self.logger.exception(f"專輯 {album_data['name']} 下載失敗: {e}")
             return False
 
     def download_cover(self, session, album_directory, cover_url):
@@ -78,9 +79,9 @@ class DownloadWorker:
                 img.save(album_directory / "cover.png")
             os.remove(cover_path)
 
-            logging.info(f"專輯封面下載完成: {cover_url}")
+            self.logger.info(f"專輯封面下載完成: {cover_url}")
         except Exception as e:
-            logging.exception(f"下載專輯封面失敗: {cover_url} - {e}")
+            self.logger.exception(f"下載專輯封面失敗: {cover_url} - {e}")
             raise
 
     def download_song(self, session, album_directory, song_data, album_data):
@@ -98,13 +99,13 @@ class DownloadWorker:
             song_file = self.download_file(
                 session, album_directory, song_name, song_sourceUrl
             )
-            logging.info(f"歌曲下載完成: {song_name} - {song_sourceUrl}")
+            self.logger.info(f"歌曲下載完成: {song_name} - {song_sourceUrl}")
 
             if song_lyricUrl:
                 lyric_path = album_directory / f"{song_name}.lrc"
                 with open(lyric_path, "wb") as f:
                     f.write(session.get(song_lyricUrl).content)
-                logging.info(f"歌詞下載完成: {song_name} - {song_lyricUrl}")
+                self.logger.info(f"歌詞下載完成: {song_name} - {song_lyricUrl}")
 
             MetadataManager.fill_metadata(
                 file_path=song_file,
@@ -121,7 +122,7 @@ class DownloadWorker:
             )
 
         except Exception as e:
-            logging.exception(f"下載歌曲失敗: {song_data['name']} - {e}")
+            self.logger.exception(f"下載歌曲失敗: {song_data['name']} - {e}")
             raise
 
     def download_file(self, session, directory, filename, url):
@@ -130,24 +131,44 @@ class DownloadWorker:
             response = session.get(url, stream=True)
             total_size = int(response.headers.get("content-length", 0))
 
-            with open(file_path, "wb") as f, tqdm(
-                desc=filename,
-                total=total_size,
-                unit="iB",
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as bar:
+            # 檢查是否有標準輸出，如果沒有則不使用 tqdm
+            use_tqdm = sys.stdout is not None and sys.stdout.isatty()
+
+            with open(file_path, "wb") as f:
+                bar = (
+                    tqdm(
+                        desc=filename,
+                        total=total_size,
+                        unit="iB",
+                        unit_scale=True,
+                        unit_divisor=1024,
+                    )
+                    if use_tqdm
+                    else None
+                )
+
                 for data in response.iter_content(chunk_size=1024):
                     if self.stop_event.is_set():
-                        logging.warning(f"檢測到停止指令，停止下載文件: {filename}")
                         raise InterruptedError(f"下載被中斷: {filename}")
                     size = f.write(data)
-                    bar.update(size)
+                    if bar:
+                        bar.update(size)
+
+                if bar:
+                    bar.close()
 
             return self._check_file_suffix(file_path, response)
 
+        except InterruptedError:
+            if bar:
+                bar.close()
+            self.logger.warning(f"檢測到停止指令，停止下載文件: {filename}")
+            raise
+
         except Exception as e:
-            logging.exception(f"下載文件失敗: {url} - {e}")
+            if bar:
+                bar.close()
+            self.logger.exception(f"下載文件失敗: {url} - {e}")
             raise
 
     def _check_file_suffix(self, file_path, response):
@@ -164,7 +185,7 @@ class DownloadWorker:
                 wav_file.export(str(final_path), format="flac")
                 os.remove(file_path)
             except Exception as e:
-                logging.exception(f"轉換 wav 文件失敗: {file_path} - {e}")
+                self.logger.exception(f"轉換 wav 文件失敗: {file_path} - {e}")
                 raise
         return final_path
 

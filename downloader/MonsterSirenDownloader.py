@@ -1,8 +1,7 @@
 import json
 import requests
-import logging
-from multiprocessing import Manager
 from pathlib import Path
+from .my_logger import get_logger
 from .TaskManager import TaskManager
 from .DownloadWorker import DownloadWorker
 
@@ -11,13 +10,9 @@ class MonsterSirenDownloader:
     def __init__(self, download_dir="./MonsterSiren/", max_workers=None):
         self.directory = Path(download_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
+
+        self.main_logger = get_logger(__name__)
         self.task_manager = TaskManager(max_workers)
-        logging.basicConfig(
-            filename=self.directory / "downloader.log",
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
 
     def run(self):
         # 初始化下載任務
@@ -31,12 +26,12 @@ class MonsterSirenDownloader:
         worker = DownloadWorker(
             directory=self.directory,
             stop_event=self.task_manager.stop_event,
-            mutex=self.task_manager.mutex
+            mutex=self.task_manager.mutex,
         )
         try:
             self.task_manager.start(tasks, worker.download_album)
         except KeyboardInterrupt:
-            print("Interrupted! Stopping downloads...")
+            self.main_logger.warning("Interrupted! Stopping downloads...")
             self.task_manager.stop()
 
     def get_albums(self):
@@ -53,7 +48,7 @@ class MonsterSirenDownloader:
         if not completed_list_path.exists():
             with open(completed_list_path, "w+", encoding="utf8") as f:
                 json.dump([], f)
-            logging.info("Adding all albums to download queue")
+            self.main_logger.info("Adding all albums to download queue")
             return all_albums
 
         with open(completed_list_path, "r", encoding="utf8") as f:
@@ -63,7 +58,9 @@ class MonsterSirenDownloader:
         for album in all_albums:
             if album["name"] not in completed_albums:
                 unfinished_albums.append(album)
-        logging.info(f"Adding {len(unfinished_albums)} albums to download queue")
+        self.main_logger.info(
+            f"Adding {len(unfinished_albums)} albums to download queue"
+        )
         return unfinished_albums
 
     def stop(self):

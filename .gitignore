@@ -5,6 +5,7 @@ __pycache__
 MonsterSiren
 build
 dist
+output
 
 test/
 test_*

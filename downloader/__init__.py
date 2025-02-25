@@ -1,5 +1,5 @@
-# downloader/__init__.py
-from .MetadataManager import MetadataManager
-from .DownloadWorker import DownloadWorker
-from .TaskManager import TaskManager
-from .MonsterSirenDownloader import MonsterSirenDownloader
+# # 不輸出任何日誌
+# import logging
+
+# logger = logging.getLogger(__name__)
+# logger.addHandler(logging.NullHandler())
