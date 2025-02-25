@@ -1,4 +1,4 @@
-import logging
+from .my_logger import get_logger
 import pylrc
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3, APIC, SYLT, Encoding
@@ -9,7 +9,12 @@ from PIL import Image
 class MetadataManager:
     @staticmethod
     def fill_metadata(
-        file_path, file_type, metadata, cover_path=None, lyrics_path=None
+        file_path,
+        file_type,
+        metadata,
+        cover_path=None,
+        lyrics_path=None,
+        log_queue=None,
     ):
         """
         填寫音樂文件的元數據。
@@ -19,6 +24,8 @@ class MetadataManager:
         :param cover_path: 專輯封面圖片的路徑（選填）。
         :param lyrics_path: 歌詞文件的路徑（選填）。
         """
+        logger = get_logger()
+
         try:
             if file_type == ".mp3":
                 MetadataManager._fill_mp3_metadata(
@@ -31,9 +38,9 @@ class MetadataManager:
             else:
                 raise ValueError(f"不支持的文件類型: {file_type}")
 
-            logging.info(f"成功填寫元數據: {file_path}")
+            logger.info(f"成功填寫元數據: {file_path}")
         except Exception as e:
-            logging.exception(f"填寫元數據時發生錯誤: {file_path} - {e}")
+            logger.exception(f"填寫元數據時發生錯誤: {file_path} - {e}")
             raise
 
     @staticmethod
