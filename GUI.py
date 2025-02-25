@@ -1,6 +1,7 @@
 # GUI.py
+import os
+import sys
 import json
-import requests
 import threading
 import tkinter as tk
 from tkinter import messagebox
@@ -8,7 +9,6 @@ from tkinter import filedialog
 import ttkbootstrap as tb
 from ttkbootstrap import ttk
 from pathlib import Path
-from multiprocessing import Manager
 
 from downloader.MonsterSirenDownloader import MonsterSirenDownloader
 
@@ -19,6 +19,19 @@ if not hasattr(PIL.Image, "CUBIC"):
     PIL.Image.CUBIC = PIL.Image.BICUBIC
 
 
+def resource_path(relative_path):
+    """Get absolute path of resource file. Used for PyInstaller.
+
+    Args:
+        relative_path (str): The relative path of resource file.
+
+    Returns:
+        str: The absolute path of resource file.
+    """
+    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
 class DownloadGUI(tb.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,8 +40,8 @@ class DownloadGUI(tb.Window):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # close window event
 
         # Set favicon
-        self.iconbitmap(Path.cwd() / "resource/favicon.ico")  # Windows
-        favicon = tk.PhotoImage(file=Path.cwd() / "resource/favicon.png")
+        self.iconbitmap(Path.cwd() / resource_path("resource/favicon.ico"))  # Windows
+        favicon = tk.PhotoImage(file=Path.cwd() / resource_path("resource/favicon.png"))
         self.iconphoto(True, favicon)  # Linux / macOS
 
         width = 350
@@ -42,7 +55,7 @@ class DownloadGUI(tb.Window):
         # self.resizable(False, False)
 
         # load gif image
-        git_path = Path.cwd() / "resource/pepe.gif"
+        git_path = Path.cwd() / resource_path("resource/pepe.gif")
         self.animation_images = self.get_git_frames(git_path)
 
         # Where to download
@@ -58,11 +71,11 @@ class DownloadGUI(tb.Window):
         frame_path = ttk.Frame(self)
         frame_path.pack(pady=10, fill="x", padx=10)
 
-        label_path = ttk.Label(frame_path, text="Download Path:")
+        label_path = ttk.Label(frame_path, text="Save Path:")
         label_path.pack(side="left")
 
-        entry_path = ttk.Entry(frame_path, textvariable=self.download_path, width=20)
-        entry_path.pack(side="left", padx=5)
+        entry_path = ttk.Entry(frame_path, textvariable=self.download_path)
+        entry_path.pack(side="left", padx=5, fill="x", expand=True)
 
         btn_browse = ttk.Button(frame_path, text="...", command=self.select_folder)
         btn_browse.pack(side="right")
@@ -79,15 +92,15 @@ class DownloadGUI(tb.Window):
             subtext="Progress",
             interactive=False,
             stripethickness=5,
-            metersize=250,
+            metersize=150,
             textright="%",
         )
         self.meter.grid(row=0, column=1, pady=10)
 
         self.label_gif_1 = ttk.Label(frame_progress)
-        self.label_gif_1.grid(row=0, column=0, sticky="s")
+        self.label_gif_1.grid(row=0, column=0, sticky="se")
         self.label_gif_2 = ttk.Label(frame_progress)
-        self.label_gif_2.grid(row=0, column=2, sticky="s")
+        self.label_gif_2.grid(row=0, column=2, sticky="sw")
         frame_progress.pack(pady=10)
 
         # Frame of the button area
@@ -248,7 +261,6 @@ class DownloadGUI(tb.Window):
             self.stop_animation((self.label_gif_1, self.label_gif_2))
             self.btn_start.config(state="normal")
             self.btn_stop.config(state="disabled")
-            print("Download stopped")
 
     def on_closing(self):
         """Close window event."""
