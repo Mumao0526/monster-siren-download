@@ -33,13 +33,10 @@ class DownloadWorker:
             self.download_cover(session, album_directory, album_data["coverUrl"])
 
             # 取得專輯內歌曲清單
-            album_url = (
-                f"https://monster-siren.hypergryph.com/api/album/{album_cid}/detail"
-            )
             songs_data = session.get(
                 album_url, headers={"Accept": "application/json"}
-            ).json()["data"]
-            for song_track_number, song_data in enumerate(songs_data["songs"]):
+            ).json()["data"]["songs"]
+            for song_track_number, song_data in enumerate(songs_data):
                 if self.stop_event.is_set():
                     self.logger.warning(f"檢測到停止指令，停止下載專輯: {album_name}")
                     return False
@@ -86,21 +83,24 @@ class DownloadWorker:
 
     def download_song(self, session, album_directory, song_data, album_data):
         try:
+            song_cid = song_data["cid"]
             song_name = self.make_valid(song_data["name"])
             song_url = (
-                f"https://monster-siren.hypergryph.com/api/song/{song_data['cid']}"
+                f"https://monster-siren.hypergryph.com/api/song/{song_cid}"
             )
             song_detail = session.get(
                 song_url, headers={"Accept": "application/json"}
             ).json()["data"]
             song_sourceUrl = song_detail["sourceUrl"]
-            song_lyricUrl = song_data.get("lyricUrl", None)
+            song_lyricUrl = song_detail["lyricUrl"]
 
+            # Download song
             song_file = self.download_file(
                 session, album_directory, song_name, song_sourceUrl
             )
             self.logger.info(f"歌曲下載完成: {song_name} - {song_sourceUrl}")
 
+            # Download lyric
             if song_lyricUrl:
                 lyric_path = album_directory / f"{song_name}.lrc"
                 with open(lyric_path, "wb") as f:
