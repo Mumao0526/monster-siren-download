@@ -3,6 +3,7 @@
 
 # logger = logging.getLogger(__name__)
 # logger.addHandler(logging.NullHandler())
+import sys
 import subprocess
 
 
@@ -18,4 +19,5 @@ class NoWindowPopen(subprocess.Popen):
         super().__init__(*args, **kwargs)
 
 
-subprocess.Popen = NoWindowPopen
+if sys.platform == "win32":
+    subprocess.Popen = NoWindowPopen

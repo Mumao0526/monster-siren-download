@@ -1,7 +1,7 @@
 import json
 import requests
 from pathlib import Path
-from .my_logger import get_logger
+from .my_logger import get_mp_main_logger
 from .TaskManager import TaskManager
 from .DownloadWorker import DownloadWorker
 
@@ -11,8 +11,12 @@ class MonsterSirenDownloader:
         self.directory = Path(download_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
 
-        self.main_logger = get_logger(__name__)
-        self.task_manager = TaskManager(max_workers)
+        self.main_logger, self.queue_listener, self.log_queue = get_mp_main_logger(
+            name=__name__,
+            to_console=True,
+            to_file=self.directory / "Log.log",
+        )
+        self.task_manager = TaskManager(self.log_queue, max_workers)
 
     def run(self):
         # 初始化下載任務
@@ -20,6 +24,8 @@ class MonsterSirenDownloader:
         self.unfinished_albums = self.compare_ablums(
             self.all_albums, self.directory / "completed_albums.json"
         )
+        for unfinished_album in self.unfinished_albums:
+            unfinished_album["log_queue"] = self.log_queue
         tasks = self.unfinished_albums
 
         # 開始下載
@@ -41,6 +47,7 @@ class MonsterSirenDownloader:
             "https://monster-siren.hypergryph.com/api/albums",
             headers={"Accept": "application/json"},
         )
+        self.main_logger.info("Getting album list from API")
         return response.json()["data"]
 
     def compare_ablums(self, all_albums, completed_list_path):
@@ -65,3 +72,6 @@ class MonsterSirenDownloader:
 
     def stop(self):
         self.task_manager.stop()
+        self.main_logger.info("MonsterSirenDownloader stopped.")
+        if self.queue_listener:
+            self.queue_listener.stop()

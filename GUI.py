@@ -45,7 +45,7 @@ class DownloadGUI(tb.Window):
         self.iconphoto(True, favicon)  # Linux / macOS
 
         width = 350
-        height = 400
+        height = 350
         window_width = self.winfo_screenwidth()  # get screen width
         window_height = self.winfo_screenheight()  # get screen height
         # set window to center
@@ -92,7 +92,7 @@ class DownloadGUI(tb.Window):
             subtext="Progress",
             interactive=False,
             stripethickness=5,
-            metersize=150,
+            metersize=200,
             textright="%",
         )
         self.meter.grid(row=0, column=1, pady=10)
@@ -208,7 +208,6 @@ class DownloadGUI(tb.Window):
         else:
             # download thread is finished
             self.update_progress()
-            self.finish_download()
 
     def update_progress(self):
         """Update download progress."""
