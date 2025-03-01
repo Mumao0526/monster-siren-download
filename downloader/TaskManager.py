@@ -1,18 +1,18 @@
-from .my_logger import get_logger
+from .my_logger import get_mp_child_logger
 import os
 import multiprocessing
 from multiprocessing import Pool
 
 
 class TaskManager:
-    def __init__(self, max_workers=None):
+    def __init__(self, log_queue=None, max_workers=None):
         self.max_workers = max_workers or os.cpu_count()
         self.stop_event = multiprocessing.Manager().Event()
         self.mutex = multiprocessing.Manager().Lock()
         self.pool = None
 
         # 初始化 logger
-        self.logger = get_logger(__name__)
+        self.logger = get_mp_child_logger(log_queue=log_queue, name=__name__)
         self.logger.info(f"TaskManager 初始化完成，最大執行緒數: {self.max_workers}")
 
     def start(self, tasks, worker_function):
@@ -31,12 +31,15 @@ class TaskManager:
             self.close_pool()
 
     def stop(self):
-        self.logger.info("收到停止指令，正在停止所有執行序...")
+        self.logger.warning("收到停止指令，正在停止所有執行序...")
         self.stop_event.set()
         if self.pool:
-            self.pool.terminate()
+            # self.pool.terminate()
+            self.pool.close()
             self.pool.join()
-            self.logger.info("所有執行緒已停止。")
+            self.logger.warning("所有執行緒已停止。")
+        else:
+            self.logger.warning("執行緒池尚未啟動。")
 
     def close_pool(self):
         if self.pool:

@@ -4,20 +4,21 @@ import json
 from PIL import Image
 import requests
 from tqdm import tqdm
-from .my_logger import get_logger
+from .my_logger import get_mp_child_logger
 from .MetadataManager import MetadataManager
 from pydub import AudioSegment
 
 
 class DownloadWorker:
-    def __init__(self, directory, stop_event, mutex, log_queue=None):
+    def __init__(self, directory, stop_event, mutex):
         self.directory = directory
         self.stop_event = stop_event
         self.mutex = mutex
-        self.logger = get_logger()
 
     def download_album(self, album_data):
         try:
+            self.log_queue = album_data["log_queue"]
+            self.logger = get_mp_child_logger(self.log_queue, name=__name__)
             album_name = self.make_valid(album_data["name"])
             album_cid = album_data["cid"]
             album_url = (
@@ -61,6 +62,10 @@ class DownloadWorker:
 
             self.logger.info(f"專輯 {album_data['name']} 下載完成。")
             return True
+
+        except InterruptedError:
+            self.logger.warning(f"檢測到停止指令，停止下載專輯: {album_data['name']}")
+            return False
 
         except Exception as e:
             self.logger.exception(f"專輯 {album_data['name']} 下載失敗: {e}")
@@ -117,10 +122,12 @@ class DownloadWorker:
                     "albumartist": album_data["artistes"],
                     "tracknumber": song_data["tracknumber"],
                 },
+                log_queue=self.log_queue,
                 cover_path=album_directory / "cover.png",
                 lyrics_path=lyric_path if song_lyricUrl else None,
             )
-
+        except InterruptedError:
+            raise
         except Exception as e:
             self.logger.exception(f"下載歌曲失敗: {song_data['name']} - {e}")
             raise
@@ -149,6 +156,8 @@ class DownloadWorker:
 
                 for data in response.iter_content(chunk_size=1024):
                     if self.stop_event.is_set():
+                        if bar:
+                            bar.close()
                         raise InterruptedError(f"下載被中斷: {filename}")
                     size = f.write(data)
                     if bar:

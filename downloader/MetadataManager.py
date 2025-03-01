@@ -1,4 +1,4 @@
-from .my_logger import get_logger
+from .my_logger import get_mp_child_logger
 import pylrc
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3, APIC, SYLT, Encoding
@@ -12,9 +12,9 @@ class MetadataManager:
         file_path,
         file_type,
         metadata,
+        log_queue,
         cover_path=None,
         lyrics_path=None,
-        log_queue=None,
     ):
         """
         填寫音樂文件的元數據。
@@ -24,7 +24,7 @@ class MetadataManager:
         :param cover_path: 專輯封面圖片的路徑（選填）。
         :param lyrics_path: 歌詞文件的路徑（選填）。
         """
-        logger = get_logger()
+        logger = get_mp_child_logger(log_queue=log_queue, name=__name__)
 
         try:
             if file_type == ".mp3":
